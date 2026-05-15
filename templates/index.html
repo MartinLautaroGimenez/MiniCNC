@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MiniCNC Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Topbar ──────────────────────────────────────────────────────────── -->
+  <header id="topbar">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 3l7 7m4-4l7-7M3 21l7-7m4 4l7 7"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+      MiniCNC
+    </div>
+
+    <div class="topbar-divider"></div>
+
+    <div class="connection-group">
+      <select id="port-select">
+        <option value="">— select port —</option>
+      </select>
+      <button id="btn-refresh-ports" title="Refresh ports">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 4v6h-6M1 20v-6h6"/>
+          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+        </svg>
+      </button>
+      <select id="baud-select">
+        {% for b in config.baud_rates %}
+        <option value="{{ b }}" {% if b == config.default_baud %}selected{% endif %}>{{ b }}</option>
+        {% endfor %}
+      </select>
+      <button id="btn-connect">Connect</button>
+    </div>
+
+    <div class="topbar-divider"></div>
+
+    <div id="machine-state">
+      <div class="dot"></div>
+      <span class="state-text">Disconnected</span>
+    </div>
+
+    <div class="topbar-spacer"></div>
+
+    <div class="topbar-actions">
+      <button class="icon-btn" id="btn-settings" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Main ────────────────────────────────────────────────────────────── -->
+  <div id="main">
+
+    <!-- Status Panel -->
+    <aside id="status-panel">
+
+      <div class="status-card">
+        <div class="status-card-title">Work Position</div>
+        <div class="coord-row">
+          <span class="coord-axis">X</span>
+          <span class="coord-val x" id="wpos-x">   0.000</span>
+          <span class="coord-unit">mm</span>
+        </div>
+        <div class="coord-row">
+          <span class="coord-axis">Y</span>
+          <span class="coord-val y" id="wpos-y">   0.000</span>
+          <span class="coord-unit">mm</span>
+        </div>
+        <div class="coord-row">
+          <span class="coord-axis">Z</span>
+          <span class="coord-val z" id="wpos-z">   0.000</span>
+          <span class="coord-unit">mm</span>
+        </div>
+      </div>
+
+      <div class="status-card">
+        <div class="status-card-title">Machine Position</div>
+        <div class="coord-row">
+          <span class="coord-axis">X</span>
+          <span class="coord-val x" id="mpos-x">   0.000</span>
+          <span class="coord-unit">mm</span>
+        </div>
+        <div class="coord-row">
+          <span class="coord-axis">Y</span>
+          <span class="coord-val y" id="mpos-y">   0.000</span>
+          <span class="coord-unit">mm</span>
+        </div>
+        <div class="coord-row">
+          <span class="coord-axis">Z</span>
+          <span class="coord-val z" id="mpos-z">   0.000</span>
+          <span class="coord-unit">mm</span>
+        </div>
+      </div>
+
+      <div class="status-card">
+        <div class="status-card-title">Machine</div>
+        <div class="stat-row">
+          <span class="stat-label">Feed</span>
+          <span class="stat-val" id="stat-feed">0 mm/m</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Spindle</span>
+          <span class="stat-val" id="stat-spindle">0 rpm</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Buffer</span>
+          <span class="stat-val" id="stat-buf">15/128</span>
+        </div>
+      </div>
+
+      <div class="status-card">
+        <div class="status-card-title">Overrides</div>
+        <div class="override-row">
+          <span>Feed</span>
+          <span id="ov-feed">100%</span>
+        </div>
+        <div class="override-row">
+          <span>Rapid</span>
+          <span id="ov-rapid">100%</span>
+        </div>
+        <div class="override-row">
+          <span>Spindle</span>
+          <span id="ov-spindle">100%</span>
+        </div>
+      </div>
+
+      <div class="status-card">
+        <div class="status-card-title">Job Progress</div>
+        <div class="stat-row">
+          <span class="stat-label" id="progress-lines">— / —</span>
+          <span class="stat-val" id="progress-pct">0%</span>
+        </div>
+        <div class="progress-mini">
+          <div class="progress-mini-bar" id="progress-mini-bar"></div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- Visualizer -->
+    <div id="visualizer-wrap">
+      <canvas id="viz-canvas"></canvas>
+
+      <div class="viz-info">
+        <div class="viz-badge" id="viz-cursor-pos">X:0.0 Y:0.0</div>
+        <div class="viz-badge" id="viz-work-size">{{ config.work_area.x }}×{{ config.work_area.y }}mm</div>
+      </div>
+
+      <div class="viz-controls">
+        <button class="viz-btn" id="viz-fit"     title="Fit to screen">⊡</button>
+        <button class="viz-btn" id="viz-zoomin"  title="Zoom in">+</button>
+        <button class="viz-btn" id="viz-zoomout" title="Zoom out">−</button>
+      </div>
+    </div>
+
+    <!-- Jog Panel -->
+    <aside id="jog-panel">
+
+      <div class="panel-title">Step Size</div>
+      <div class="jog-step-group">
+        <div class="step-buttons">
+          <button class="step-btn" data-step="0.01">0.01</button>
+          <button class="step-btn" data-step="0.1">0.1</button>
+          <button class="step-btn active" data-step="1">1</button>
+          <button class="step-btn" data-step="10">10</button>
+          <button class="step-btn" data-step="50">50</button>
+        </div>
+      </div>
+
+      <div class="feed-group">
+        <div class="feed-label">
+          <span>Jog Feed</span>
+          <span id="jog-feed-val">800 mm/m</span>
+        </div>
+        <input type="range" id="jog-feed-slider" min="10" max="{{ config.max_feed_rate }}" value="800" step="10">
+      </div>
+
+      <div class="panel-title">XY Jog</div>
+      <div class="jog-pad">
+        <div></div>
+        <button class="jog-btn" id="jog-yp">↑</button>
+        <div></div>
+        <button class="jog-btn" id="jog-xm">←</button>
+        <button class="jog-btn home-center" title="Go to XY origin" onclick="sendCmd('G0 X0 Y0')">⌂</button>
+        <button class="jog-btn" id="jog-xp">→</button>
+        <div></div>
+        <button class="jog-btn" id="jog-ym">↓</button>
+        <div></div>
+      </div>
+
+      <div class="panel-title">Z Axis</div>
+      <div class="z-pad" style="height:64px">
+        <button class="z-btn" id="jog-zp">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 19V5M5 12l7-7 7 7"/>
+          </svg>
+          <span class="z-label">Z+</span>
+        </button>
+        <button class="z-btn" id="jog-zm">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 5v14M5 12l7 7 7-7"/>
+          </svg>
+          <span class="z-label">Z−</span>
+        </button>
+      </div>
+
+      <div class="panel-title">Actions</div>
+      <div class="action-buttons">
+        <button class="action-btn btn-home" id="btn-home">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+          </svg>
+          Home All ($H)
+        </button>
+        <button class="action-btn btn-zero" id="btn-zero">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+          Zero Work XYZ
+        </button>
+        <button class="action-btn btn-probe" id="btn-probe">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v4M12 18v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M2 12h4M18 12h4"/>
+          </svg>
+          Probe Z
+        </button>
+        <button class="action-btn btn-unlock" id="btn-unlock">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0110 0"/>
+          </svg>
+          Unlock ($X)
+        </button>
+      </div>
+
+    </aside>
+  </div><!-- /main -->
+
+  <!-- ── Bottom ───────────────────────────────────────────────────────────── -->
+  <div id="bottom">
+    <div class="tab-bar">
+      <div class="tab active" data-tab="gcode">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+        </svg>
+        GCode
+      </div>
+      <div class="tab" data-tab="svg">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/>
+        </svg>
+        SVG → GCode
+      </div>
+      <div class="tab" data-tab="console">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+        </svg>
+        Console
+      </div>
+    </div>
+
+    <!-- GCode Tab -->
+    <div class="tab-content active" id="tab-gcode">
+      <div class="gcode-sidebar">
+
+        <div class="drop-zone" id="drop-zone">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <p><strong>Drop GCode file</strong><br>or click to browse<br>.nc .gcode .tap</p>
+        </div>
+        <input type="file" id="file-input" accept=".nc,.gcode,.tap,.txt">
+
+        <div class="gcode-file-info" id="gcode-file-info">
+          <div class="file-name" id="file-name">—</div>
+          <div class="file-meta" id="file-meta">—</div>
+        </div>
+
+        <div class="job-controls">
+          <button class="btn-run" id="btn-run" disabled>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            Start Job
+          </button>
+          <div class="job-secondary">
+            <button class="btn-pause" id="btn-pause">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+              </svg>
+              Pause
+            </button>
+            <button class="btn-stop" id="btn-stop">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+              </svg>
+              Stop
+            </button>
+          </div>
+        </div>
+
+        <div class="progress-bar-wrap">
+          <div class="progress-info">
+            <span id="progress-lines">— / — lines</span>
+            <span id="progress-pct">0%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-bar-fill" id="progress-fill"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="gcode-viewer" id="gcode-viewer">
+        <div style="color:var(--text-dim);padding:8px;font-style:italic">
+          Load a GCode file to preview it here…
+        </div>
+      </div>
+    </div>
+
+    <!-- SVG Tab -->
+    <div class="tab-content" id="tab-svg">
+      <div class="svg-layout">
+
+        <div class="svg-sidebar">
+
+          <div class="svg-section">
+            <div class="svg-section-title">SVG File</div>
+            <div class="drop-zone" id="svg-drop-zone" style="padding:12px 8px">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <p style="font-size:10px"><strong>Drop SVG</strong> or click</p>
+            </div>
+            <input type="file" id="svg-file-input" accept=".svg">
+          </div>
+
+          <div class="svg-section">
+            <div class="svg-section-title">Movement</div>
+            <div class="field-row">
+              <div class="field-label">
+                <span>Feed Rate (mm/min)</span>
+                <span id="svg-feed-val">800</span>
+              </div>
+              <input type="range" id="svg-feed" min="100" max="{{ config.max_feed_rate }}" value="800" step="50">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Seek Rate (mm/min)</label>
+              <input type="number" class="field-input" id="svg-seek" value="2000" min="100" max="{{ config.max_feed_rate }}">
+            </div>
+          </div>
+
+          <div class="svg-section">
+            <div class="svg-section-title">Depth</div>
+            <div class="field-row-inline">
+              <div class="field-row">
+                <label class="field-label">Z Safe</label>
+                <input type="number" class="field-input" id="svg-zsafe" value="5" step="0.5">
+              </div>
+              <div class="field-row">
+                <label class="field-label">Z Cut</label>
+                <input type="number" class="field-input" id="svg-zcut" value="-0.5" step="0.1">
+              </div>
+            </div>
+            <div class="field-row-inline">
+              <div class="field-row">
+                <label class="field-label">Passes</label>
+                <input type="number" class="field-input" id="svg-passes" value="1" min="1" max="20">
+              </div>
+              <div class="field-row">
+                <label class="field-label">Pass depth</label>
+                <input type="number" class="field-input" id="svg-passdepth" value="0.5" step="0.1">
+              </div>
+            </div>
+          </div>
+
+          <div class="svg-section">
+            <div class="svg-section-title">Transform</div>
+            <div class="field-row">
+              <label class="field-label">Scale</label>
+              <input type="number" class="field-input" id="svg-scale" value="1" step="0.01" min="0.01">
+            </div>
+            <div class="field-row-inline">
+              <div class="field-row">
+                <label class="field-label">Origin X</label>
+                <input type="number" class="field-input" id="svg-ox" value="0">
+              </div>
+              <div class="field-row">
+                <label class="field-label">Origin Y</label>
+                <input type="number" class="field-input" id="svg-oy" value="0">
+              </div>
+            </div>
+          </div>
+
+          <div class="svg-section">
+            <div class="svg-section-title">Spindle / Laser</div>
+            <div class="field-row">
+              <label class="field-label">
+                <span>Laser mode</span>
+                <input type="checkbox" id="svg-laser">
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field-label">Speed (S value)</label>
+              <input type="number" class="field-input" id="svg-spindle" value="{{ config.max_spindle_rpm }}" min="0">
+            </div>
+          </div>
+
+          <div class="svg-section">
+            <button class="btn-convert" id="btn-convert" disabled>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
+                <polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
+              </svg>
+              Convert to GCode
+            </button>
+            <button class="btn-download" id="btn-download-gcode" disabled>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Download .nc
+            </button>
+            <button class="btn-download" id="btn-use-gcode" disabled style="color:var(--accent2);border-color:var(--accent2)">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              Send to Job Queue
+            </button>
+          </div>
+
+        </div>
+
+        <div class="svg-preview-area">
+          <div class="svg-preview">
+            <div class="preview-label">SVG Preview</div>
+            <div id="svg-preview-canvas" style="width:90%;height:90%;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:12px">
+              Load an SVG file…
+            </div>
+          </div>
+          <div class="svg-gcode-out" id="svg-gcode-out" style="color:var(--text-dim);font-style:italic">
+; GCode will appear here after conversion…
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Console Tab -->
+    <div class="tab-content" id="tab-console">
+      <div style="display:flex;gap:6px;padding:6px 10px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap">
+        <button class="step-btn quick-cmd" data-cmd="?" style="min-width:fit-content;padding:0 10px">? Status</button>
+        <button class="step-btn quick-cmd" data-cmd="$$" style="min-width:fit-content;padding:0 10px">$$ Settings</button>
+        <button class="step-btn quick-cmd" data-cmd="$#" style="min-width:fit-content;padding:0 10px">$# Params</button>
+        <button class="step-btn quick-cmd" data-cmd="$I" style="min-width:fit-content;padding:0 10px">$I Info</button>
+        <button class="step-btn quick-cmd" data-cmd="$G" style="min-width:fit-content;padding:0 10px">$G State</button>
+        <button class="step-btn quick-cmd" data-cmd="$X" style="min-width:fit-content;padding:0 10px">$X Unlock</button>
+        <button class="step-btn quick-cmd" data-cmd="$H" style="min-width:fit-content;padding:0 10px">$H Home</button>
+        <button class="step-btn quick-cmd" data-cmd="!" style="min-width:fit-content;padding:0 10px">! Hold</button>
+        <button class="step-btn quick-cmd" data-cmd="~" style="min-width:fit-content;padding:0 10px">~ Resume</button>
+      </div>
+      <div class="console-output" id="console-output"></div>
+      <div class="console-input-row">
+        <input type="text" class="console-input" id="console-input" placeholder="Enter GRBL command… (↑↓ history)">
+        <button class="btn-send" id="btn-send">Send</button>
+      </div>
+    </div>
+
+  </div><!-- /bottom -->
+
+</div><!-- /app -->
+
+<!-- ── Settings Modal ──────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">Machine Settings</span>
+      <button class="modal-close" onclick="document.getElementById('settings-modal').classList.remove('open')">×</button>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Work Area (mm)</div>
+      <div class="settings-row">
+        <span class="settings-label">Width (X)</span>
+        <input type="number" class="settings-input" id="cfg-x" value="{{ config.work_area.x }}" min="1">
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Height (Y)</span>
+        <input type="number" class="settings-input" id="cfg-y" value="{{ config.work_area.y }}" min="1">
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Depth (Z)</span>
+        <input type="number" class="settings-input" id="cfg-z" value="{{ config.work_area.z }}" min="1">
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Speed Limits</div>
+      <div class="settings-row">
+        <span class="settings-label">Max Feed (mm/min)</span>
+        <input type="number" class="settings-input" id="cfg-feed" value="{{ config.max_feed_rate }}" min="1">
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Max Spindle (RPM)</span>
+        <input type="number" class="settings-input" id="cfg-spindle" value="{{ config.max_spindle_rpm }}" min="0">
+      </div>
+    </div>
+
+    <button class="btn-save" id="btn-save-settings">Save Settings</button>
+  </div>
+</div>
+
+<!-- ── Toast container ─────────────────────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<script src="{{ url_for('static', filename='js/visualizer.js') }}"></script>
+<script src="{{ url_for('static', filename='js/svg2gcode.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
